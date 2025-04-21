@@ -25,7 +25,7 @@ SECRET_KEY = os.getenv('SECRET_KEY')
 DEBUG = False
 
 # ALLOWED_HOSTS = []
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['auth-service-r8xq.onrender.com']
 
 
 # Application definition
