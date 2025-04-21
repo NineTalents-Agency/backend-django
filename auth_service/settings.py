@@ -178,7 +178,13 @@ SIMPLE_JWT = {
 }
 
 # CORS settings
-CORS_ALLOW_ALL_ORIGINS = True  # For development only, restrict in production
+#CORS_ALLOW_ALL_ORIGINS = True  # For development only, restrict in production
+
+CORS_ALLOWED_ORIGINS = [
+    "https://yourfrontend.com",
+    "http://localhost:5170",  # React/Vue dev server
+]
+
 
 
 
