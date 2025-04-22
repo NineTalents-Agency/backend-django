@@ -6,6 +6,10 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from datetime import timedelta
+
+from django.contrib.auth import authenticate
+from rest_framework.exceptions import AuthenticationFailed
+
 from .serializers import (
     UserSerializer, RegisterSerializer, LoginSerializer,
     VerifyEmailSerializer, ResendVerificationSerializer,
@@ -55,11 +59,23 @@ class LoginView(APIView):
     permission_classes = (AllowAny,)
 
     def post(self, request):
+        # Deserialize and validate data
         serializer = LoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        user = serializer.validated_data
-        
-       # Rate limit logic (e.g., one token every 30 seconds)
+
+        # Retrieve the user instance from the validated data
+        user = serializer.validated_data.get('user')  # This assumes 'user' is part of validated_data from the serializer
+        password = serializer.validated_data.get("password")
+
+        # Check if the user exists
+        if user is None:
+            raise AuthenticationFailed("Invalid email or password.")
+
+        # Check if the password matches the user
+        if not user.check_password(password):
+            raise AuthenticationFailed("Invalid email or password.")
+
+        # Rate limit logic (one token every 30 seconds)
         cooldown = timedelta(seconds=30)
         now = timezone.now()
         if user.last_token_issued_at and (now - user.last_token_issued_at) < cooldown:
@@ -68,19 +84,14 @@ class LoginView(APIView):
                 {"error": f"Too many token requests. Try again in {remaining.seconds} seconds."},
                 status=status.HTTP_429_TOO_MANY_REQUESTS
             )
-        
-            
-        # Passed cooldown check, issue tokens
+
+        # Issue tokens after rate limit is passed
         refresh = RefreshToken.for_user(user)
         user.last_token_issued_at = now
-        user.save()
-        
-          # Update last_token_issued_at
-        user.last_token_issued_at = timezone.now()
         user.save(update_fields=['last_token_issued_at'])
-        
+
+        # Check if email is verified
         if not user.email_verified:
-            # Optionally, send another code here if needed
             verification_code = VerificationCode.generate_code(user)
             send_verification_email(user, verification_code.code)
 
@@ -88,7 +99,6 @@ class LoginView(APIView):
                 {"error": "Email not verified. A verification code has been sent to your email."},
                 status=status.HTTP_403_FORBIDDEN
             )
-        
 
         return Response({
             "user": UserSerializer(user).data,
@@ -97,7 +107,8 @@ class LoginView(APIView):
             "message": "Login successful.",
             "email_verified": user.email_verified
         })
-        
+
+
         
 class LogoutView(APIView):
     permission_classes = (IsAuthenticated,)

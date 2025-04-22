@@ -55,3 +55,36 @@ def send_verification_email(user, verification_code):
 
     # Send email using Brevo
     return send_brevo_email(user.email, subject, html_content)
+
+
+
+# from django.core.mail import EmailMessage
+# from django.conf import settings
+# import logging
+
+# logger = logging.getLogger(__name__)
+
+# def send_verification_email(user, verification_code):
+#     subject = "Verify Your Email Address"
+#     from_email = settings.DEFAULT_FROM_EMAIL
+#     to_email = [user.email]
+
+#     html_content = f"""
+#     <html>
+#     <body>
+#         <h2>Hello {user.first_name},</h2>
+#         <p>Your verification code is:</p>
+#         <h3>{verification_code}</h3>
+#     </body>
+#     </html>
+#     """
+
+#     try:
+#         email = EmailMessage(subject, html_content, from_email, to_email)
+#         email.content_subtype = "html"
+#         email.send()
+#         logger.info(f"Sent verification email to {user.email} via console backend")
+#         return True
+#     except Exception as e:
+#         logger.error(f"Error sending email: {e}")
+#         return False

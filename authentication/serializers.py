@@ -37,6 +37,7 @@ class RegisterSerializer(serializers.ModelSerializer):
         user = User.objects.create_user(**validated_data)
         return user
 
+
 class LoginSerializer(serializers.Serializer):
     email = serializers.EmailField(required=True)
     password = serializers.CharField(required=True, write_only=True)
@@ -47,15 +48,20 @@ class LoginSerializer(serializers.Serializer):
 
         if email and password:
             user = authenticate(request=self.context.get('request'), email=email, password=password)
-            if not user:
-                msg = _('Unable to log in with provided credentials.')
-                raise serializers.ValidationError(msg, code='authorization')
-        else:
-            msg = _('Must include "email" and "password".')
-            raise serializers.ValidationError(msg, code='authorization')
 
-        attrs['user'] = user
-        return user
+            if not user:
+                raise serializers.ValidationError({
+                    "detail": "Invalid email or password."
+                })
+
+            attrs['user'] = user
+            return attrs
+
+        raise serializers.ValidationError({
+            "detail": "Both email and password are required."
+        })
+
+
 
 class VerifyEmailSerializer(serializers.Serializer):
     email = serializers.EmailField(required=True)
