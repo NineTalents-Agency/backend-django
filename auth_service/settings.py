@@ -187,7 +187,7 @@ SIMPLE_JWT = {
 #     "http://localhost:5170",  # React/Vue dev server
 # ]
 
-ALLOWED_HOSTS = ['127.0.0.1', 'localhost', 'http://localhost:5170', 'http://localhost:3000', 'auth-service-r8xq.onrender.com']
+ALLOWED_HOSTS = ['http://127.0.0.1:5170', 'http://127.0.0.1:3000', 'auth-service-r8xq.onrender.com']
 
 
 
