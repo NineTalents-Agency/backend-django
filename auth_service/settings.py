@@ -182,15 +182,12 @@ SIMPLE_JWT = {
 # CORS settings
 #CORS_ALLOW_ALL_ORIGINS = True  # For development only, restrict in production
 
-# CORS_ALLOWED_ORIGINS = [
-#     "https://yourfrontend.com",
-#     "http://localhost:5170",  # React/Vue dev server
-# ]
-
-ALLOWED_HOSTS = ['http://127.0.0.1:5170', 'http://127.0.0.1:3000', 'auth-service-r8xq.onrender.com', 'http://127.0.0.1:5501',]
-
-
-
+CORS_ALLOWED_ORIGINS = [
+    "http://127.0.0.1:5501",
+    "http://localhost:5501",
+    "http://localhost:5170",
+    "auth-service-r8xq.onrender.com"
+]
 
 
 
