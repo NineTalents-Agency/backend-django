@@ -6,17 +6,17 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from datetime import timedelta
-
 from django.contrib.auth import authenticate
 from rest_framework.exceptions import AuthenticationFailed
-
+from rest_framework.decorators import api_view, permission_classes
 from .serializers import (
     UserSerializer, RegisterSerializer, LoginSerializer,
     VerifyEmailSerializer, ResendVerificationSerializer,
-    UpdateUserSerializer, PasswordChangeSerializer
+    UpdateUserSerializer, PasswordChangeSerializer,
+    ForgotPasswordSerializer, ResetPasswordSerializer
 )
 from users.models import VerificationCode
-from .utils import send_verification_email
+from .utils import send_verification_email, send_password_reset_email
 import logging
 
 logger = logging.getLogger(__name__)
@@ -32,8 +32,8 @@ class RegisterView(generics.CreateAPIView):
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
         
-        # Generate verification code
-        verification_code = VerificationCode.generate_code(user)
+        # Generate verification code with 15-minute expiration
+        verification_code = VerificationCode.generate_code(user, purpose='email_verification')
         
         # Send verification email
         email_sent = send_verification_email(user, verification_code.code)
@@ -44,7 +44,7 @@ class RegisterView(generics.CreateAPIView):
         # Generate tokens
         refresh = RefreshToken.for_user(user)
         
-          # Update last_token_issued_at
+        # Update last_token_issued_at
         user.last_token_issued_at = timezone.now()
         user.save(update_fields=['last_token_issued_at'])
         
@@ -52,7 +52,7 @@ class RegisterView(generics.CreateAPIView):
             "user": UserSerializer(user).data,
             "refresh": str(refresh),
             "access": str(refresh.access_token),
-            "message": "Verification code has been sent to your email." if email_sent else "Account created but verification email could not be sent. Please request a new code."
+            "message": "Verification code has been sent to your email. It will expire in 30 minutes." if email_sent else "Account created but verification email could not be sent. Please request a new code."
         }, status=status.HTTP_201_CREATED)
 
 class LoginView(APIView):
@@ -92,11 +92,11 @@ class LoginView(APIView):
 
         # Check if email is verified
         if not user.email_verified:
-            verification_code = VerificationCode.generate_code(user)
+            verification_code = VerificationCode.generate_code(user, purpose='email_verification')
             send_verification_email(user, verification_code.code)
 
             return Response(
-                {"error": "Email not verified. A verification code has been sent to your email."},
+                {"error": "Email not verified. A verification code has been sent to your email. It will expire in 30 minutes."},
                 status=status.HTTP_403_FORBIDDEN
             )
 
@@ -107,7 +107,6 @@ class LoginView(APIView):
             "message": "Login successful.",
             "email_verified": user.email_verified
         })
-
 
         
 class LogoutView(APIView):
@@ -177,15 +176,13 @@ class VerifyEmailView(APIView):
             
             logger.info(f"Email verified successfully for {email}")
             
-             
             # Generate tokens for automatic login
             refresh = RefreshToken.for_user(user)
             
-             # Update last_token_issued_at
+            # Update last_token_issued_at
             user.last_token_issued_at = timezone.now()
             user.save(update_fields=['last_token_issued_at'])
                 
-            
             return Response({
                 "message": "Email verified successfully.",
                 "user": UserSerializer(user).data,
@@ -200,8 +197,6 @@ class VerifyEmailView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
-            
-
 class ResendVerificationView(APIView):
     permission_classes = (AllowAny,)
 
@@ -214,32 +209,29 @@ class ResendVerificationView(APIView):
         try:
             user = User.objects.get(email=email)
 
-            # Check if enough time has passed to resend the code (10 minutes)
-            try:
-                verification_code = VerificationCode.objects.get(user=user)
-                time_elapsed = timezone.now() - verification_code.created_at
+            # Check if user is already verified
+            if user.email_verified:
+                return Response(
+                    {"message": "Your email is already verified."},
+                    status=status.HTTP_200_OK
+                )
 
-                if time_elapsed < timedelta(minutes=10):
-                    remaining_time = timedelta(minutes=10) - time_elapsed
-                    return Response(
-                        {"error": f"Too soon to resend the verification code. Try again in {remaining_time.seconds // 60} minutes."},
-                        status=status.HTTP_429_TOO_MANY_REQUESTS
-                    )
-                else:
-                    verification_code.delete()  # Delete old code before creating a new one
-            except VerificationCode.DoesNotExist:
-                pass  # If no code exists, create a new one
+            # Check if enough time has passed to resend the code (1 minute)
+            if not VerificationCode.can_request_new_code(user, 'email_verification'):
+                cooldown_seconds = VerificationCode.get_cooldown_seconds(user, 'email_verification')
+                return Response(
+                    {"error": f"Please wait {cooldown_seconds} seconds before requesting a new code."},
+                    status=status.HTTP_429_TOO_MANY_REQUESTS
+                )
 
-            # Generate new verification code
-            verification_code = VerificationCode.generate_code(user)
+            # Generate new verification code with 15-minute expiration
+            verification_code = VerificationCode.generate_code(user, purpose='email_verification')
 
             # Send verification email
             email_sent = send_verification_email(user, verification_code.code)
 
             if email_sent:
-                message = "Verification code has been sent to your email."
-                if user.email_verified:
-                    message = "Your email is already verified, but a new code has been sent."
+                message = "Verification code has been sent to your email. It will expire in 30 minutes."
             else:
                 message = "Failed to send verification code. Please try again later."
                 logger.error(f"Failed to send verification email to {email}")
@@ -251,10 +243,7 @@ class ResendVerificationView(APIView):
             return Response(
                 {"error": "User with this email does not exist."},
                 status=status.HTTP_404_NOT_FOUND
-            )            
-
-
-
+            )
 
 class PasswordChangeView(APIView):
     permission_classes = (IsAuthenticated,)
@@ -283,11 +272,10 @@ class PasswordChangeView(APIView):
         # Generate new tokens
         refresh = RefreshToken.for_user(user)
         
-         # Update last_token_issued_at
+        # Update last_token_issued_at
         user.last_token_issued_at = timezone.now()
         user.save(update_fields=['last_token_issued_at'])
                 
-        
         return Response({
             "message": "Password changed successfully.",
             "refresh": str(refresh),
@@ -316,3 +304,96 @@ class HealthCheckView(APIView):
     
     def get(self, request):
         return Response({"status": "healthy"})
+
+# New Forgotten Password Views
+
+class ForgotPasswordView(APIView):
+    permission_classes = (AllowAny,)
+    
+    def post(self, request):
+        serializer = ForgotPasswordSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        email = serializer.validated_data['email']
+        
+        try:
+            user = User.objects.get(email=email)
+            
+            # Check if enough time has passed to request a new code (1 minute)
+            if not VerificationCode.can_request_new_code(user, 'password_reset'):
+                cooldown_seconds = VerificationCode.get_cooldown_seconds(user, 'password_reset')
+                return Response(
+                    {"error": f"Please wait {cooldown_seconds} seconds before requesting a new code."},
+                    status=status.HTTP_429_TOO_MANY_REQUESTS
+                )
+            
+            # Generate password reset code with 15-minute expiration
+            reset_code = VerificationCode.generate_code(user, purpose='password_reset')
+            
+            # Send password reset email
+            email_sent = send_password_reset_email(user, reset_code.code)
+            
+            # For security reasons, always return success even if email fails
+            # But log the failure
+            if not email_sent:
+                logger.error(f"Failed to send password reset email to {email}")
+            
+            return Response({
+                "message": "If your email is registered, you will receive a password reset code. It will expire in 15 minutes."
+            })
+            
+        except User.DoesNotExist:
+            # For security reasons, don't reveal that the user doesn't exist
+            logger.info(f"Password reset attempted for non-existent email: {email}")
+            return Response({
+                "message": "If your email is registered, you will receive a password reset code. It will expire in 15 minutes."
+            })
+
+class ResetPasswordView(APIView):
+    permission_classes = (AllowAny,)
+    
+    def post(self, request):
+        serializer = ResetPasswordSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        email = serializer.validated_data['email']
+        code = serializer.validated_data['code']
+        new_password = serializer.validated_data['password']
+        
+        try:
+            user = User.objects.get(email=email)
+            verification_code = VerificationCode.objects.filter(
+                user=user,
+                code=code,
+                is_used=False,
+                purpose='password_reset',
+                expires_at__gt=timezone.now()
+            ).order_by('-created_at').first()
+            
+            if not verification_code:
+                logger.warning(f"Invalid or expired password reset code attempt for {email}")
+                return Response(
+                    {"error": "Invalid or expired password reset code."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Mark code as used
+            verification_code.is_used = True
+            verification_code.save()
+            
+            # Set new password
+            user.set_password(new_password)
+            user.save()
+            
+            logger.info(f"Password reset successfully for {email}")
+            
+            return Response({
+                "message": "Password has been reset successfully. You can now log in with your new password."
+            })
+            
+        except User.DoesNotExist:
+            logger.warning(f"Password reset attempt for non-existent user: {email}")
+            return Response(
+                {"error": "Invalid email or code."},
+                status=status.HTTP_400_BAD_REQUEST
+            )

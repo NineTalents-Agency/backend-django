@@ -1,10 +1,9 @@
-
 from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
 from .views import (
     RegisterView, LoginView, LogoutView, UserProfileView,
     VerifyEmailView, ResendVerificationView, KYCStatusUpdateView,
-    HealthCheckView, PasswordChangeView
+    HealthCheckView, PasswordChangeView, ForgotPasswordView, ResetPasswordView
 )
 
 urlpatterns = [
@@ -18,4 +17,8 @@ urlpatterns = [
     path('change-password/', PasswordChangeView.as_view(), name='change_password'),
     path('users/<int:user_id>/kyc-status/', KYCStatusUpdateView.as_view(), name='kyc_status_update'),
     path('health/', HealthCheckView.as_view(), name='health'),
+    
+    # New forgotten password URLs
+    path('forgot-password/', ForgotPasswordView.as_view(), name='forgot_password'),
+    path('reset-password/', ResetPasswordView.as_view(), name='reset_password'),
 ]

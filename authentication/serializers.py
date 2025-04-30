@@ -62,7 +62,6 @@ class LoginSerializer(serializers.Serializer):
         })
 
 
-
 class VerifyEmailSerializer(serializers.Serializer):
     email = serializers.EmailField(required=True)
     code = serializers.CharField(required=True, min_length=6, max_length=6)
@@ -83,4 +82,19 @@ class PasswordChangeSerializer(serializers.Serializer):
     def validate(self, attrs):
         if attrs['new_password'] != attrs['new_password2']:
             raise serializers.ValidationError({"new_password": "Password fields didn't match."})
+        return attrs
+
+# New serializers for forgotten password functionality
+class ForgotPasswordSerializer(serializers.Serializer):
+    email = serializers.EmailField(required=True)
+
+class ResetPasswordSerializer(serializers.Serializer):
+    email = serializers.EmailField(required=True)
+    code = serializers.CharField(required=True, min_length=6, max_length=6)
+    password = serializers.CharField(required=True, min_length=8, write_only=True)
+    password2 = serializers.CharField(required=True, min_length=8, write_only=True)
+    
+    def validate(self, attrs):
+        if attrs['password'] != attrs['password2']:
+            raise serializers.ValidationError({"password2": _("Password fields didn't match.")})
         return attrs
