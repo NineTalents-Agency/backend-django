@@ -2,7 +2,7 @@ from rest_framework import status, generics
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
-from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.tokens import RefreshToken, TokenError
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from datetime import timedelta
@@ -107,20 +107,88 @@ class LoginView(APIView):
             "message": "Login successful.",
             "email_verified": user.email_verified
         })
-
         
 class LogoutView(APIView):
     permission_classes = (IsAuthenticated,)
-
+    
     def post(self, request):
         try:
-            refresh_token = request.data["refresh"]
+            # Get the refresh token from the request
+            refresh_token = request.data.get("refresh")
+            
+            if not refresh_token:
+                return Response(
+                    {"error": "Refresh token is required"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Blacklist the token
             token = RefreshToken(refresh_token)
             token.blacklist()
-            return Response({"message": "Logout successful"}, status=status.HTTP_200_OK)
+            
+            # Log the successful logout
+            logger.info(f"User {request.user.email} logged out successfully")
+            
+            return Response(
+                {"message": "Logout successful"},
+                status=status.HTTP_200_OK
+            )
+            
+        except TokenError as e:
+            logger.warning(f"Invalid token during logout for user {request.user.email}: {str(e)}")
+            return Response(
+                {"error": "Invalid or expired token"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
         except Exception as e:
-            logger.error(f"Logout error: {str(e)}")
-            return Response({"error": "Invalid token"}, status=status.HTTP_400_BAD_REQUEST)
+            logger.error(f"Logout error for user {request.user.email}: {str(e)}")
+            return Response(
+                {"error": "An error occurred during logout"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        
+# class LogoutView(APIView):
+#     permission_classes = (IsAuthenticated,)
+
+#     def post(self, request):
+#         try:
+#             refresh_token = request.data["refresh"]
+#             token = RefreshToken(refresh_token)
+#             token.blacklist()
+#             return Response({"message": "Logout successful"}, status=status.HTTP_200_OK)
+#         except Exception as e:
+#             logger.error(f"Logout error: {str(e)}")
+#             return Response({"error": "Invalid token"}, status=status.HTTP_400_BAD_REQUEST)
+        
+   #logout from all device     
+class LogoutAllView(APIView):
+    permission_classes = (IsAuthenticated,)
+    
+    def post(self, request):
+        try:
+            # Get all valid tokens for the user and blacklist them
+            user = request.user
+            
+            # Update last_token_issued_at to invalidate all previous tokens
+            user.last_token_issued_at = timezone.now()
+            user.save(update_fields=['last_token_issued_at'])
+            
+            # Log the action
+            logger.info(f"User {user.email} logged out from all devices")
+            
+            return Response(
+                {"message": "Successfully logged out from all devices"},
+                status=status.HTTP_200_OK
+            )
+            
+        except Exception as e:
+            logger.error(f"Error during logout-all for user {request.user.email}: {str(e)}")
+            return Response(
+                {"error": "An error occurred during logout from all devices"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )       
 
 class UserProfileView(generics.RetrieveUpdateAPIView):
     permission_classes = (IsAuthenticated,)
@@ -305,7 +373,6 @@ class HealthCheckView(APIView):
     def get(self, request):
         return Response({"status": "healthy"})
 
-# New Forgotten Password Views
 
 class ForgotPasswordView(APIView):
     permission_classes = (AllowAny,)
