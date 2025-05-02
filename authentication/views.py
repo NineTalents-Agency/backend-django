@@ -425,7 +425,7 @@ class ResetPasswordView(APIView):
         
         email = serializer.validated_data['email']
         code = serializer.validated_data['code']
-        new_password = serializer.validated_data['password']
+        new_password = serializer.validated_data['new_password']
         
         try:
             user = User.objects.get(email=email)
