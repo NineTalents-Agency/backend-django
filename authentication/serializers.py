@@ -91,10 +91,10 @@ class ForgotPasswordSerializer(serializers.Serializer):
 class ResetPasswordSerializer(serializers.Serializer):
     email = serializers.EmailField(required=True)
     code = serializers.CharField(required=True, min_length=6, max_length=6)
-    new_Password = serializers.CharField(required=True, min_length=8, write_only=True)
-    confirm_Password = serializers.CharField(required=True, min_length=8, write_only=True)
+    new_password = serializers.CharField(required=True, min_length=8, write_only=True)
+    confirm_password = serializers.CharField(required=True, min_length=8, write_only=True)
     
     def validate(self, attrs):
-        if attrs['new_Password'] != attrs['confirm_Password ']:
-            raise serializers.ValidationError({"confirm_Password ": _("Password fields didn't match.")})
+        if attrs['new_password'] != attrs['confirm_password']:
+            raise serializers.ValidationError({"confirm_password ": _("Password fields didn't match.")})
         return attrs
