@@ -5,12 +5,12 @@ from django.utils.translation import gettext_lazy as _
 User = get_user_model()
 
 class UserSerializer(serializers.ModelSerializer):
-    class Meta:
+   class Meta:
         model = User
-        fields = ('id', 'email', 'first_name', 'last_name', 'email_verified', 
+        fields = ('id', 'custom_id', 'email', 'first_name', 'last_name', 'email_verified', 
                  'kyc_verified', 'phone_number', 'date_of_birth', 'address')
-        read_only_fields = ('email_verified', 'kyc_verified')
-
+        read_only_fields = ('id', 'custom_id', 'email_verified', 'kyc_verified')
+        
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=True, style={'input_type': 'password'})
     password2 = serializers.CharField(write_only=True, required=True, style={'input_type': 'password'})

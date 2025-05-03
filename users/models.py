@@ -1,11 +1,19 @@
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.utils import timezone
+from django.db.models.signals import pre_save
+from django.dispatch import receiver
 import random
 import string
 import logging
 
 logger = logging.getLogger(__name__)
+
+def generate_custom_id(prefix, length_numeric=3, length_alpha=2):
+    """Generate a custom ID with format like "US753-6G"""
+    numeric_part = ''.join(random.choices(string.digits, k=length_numeric))
+    alpha_part = ''.join(random.choices(string.ascii_uppercase + string.digits, k=length_alpha))
+    return f"{prefix}{numeric_part}-{alpha_part}"
 
 class CustomUserManager(BaseUserManager):
     def create_user(self, email, password=None, **extra_fields):
@@ -31,6 +39,9 @@ class CustomUserManager(BaseUserManager):
         return self.create_user(email, password, **extra_fields)
 
 class User(AbstractBaseUser, PermissionsMixin):
+    # Add custom_id field (not a primary key)
+    custom_id = models.CharField(max_length=20, unique=True, null=True, blank=True)
+    
     email = models.EmailField(unique=True)
     first_name = models.CharField(max_length=30, blank=True)
     last_name = models.CharField(max_length=30, blank=True)
@@ -65,6 +76,9 @@ class User(AbstractBaseUser, PermissionsMixin):
             logger.info(f"User updated: {self.email}")
             
 class VerificationCode(models.Model):
+    # Add custom_id field (not a primary key)
+    custom_id = models.CharField(max_length=20, unique=True, null=True, blank=True)
+    
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='verification_codes')
     code = models.CharField(max_length=6)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -138,3 +152,25 @@ class VerificationCode(models.Model):
 
     def __str__(self):
         return f"{self.code} for {self.user.email} ({self.purpose})"
+
+# Signal to generate custom ID before saving User
+@receiver(pre_save, sender=User)
+def set_custom_user_id(sender, instance, **kwargs):
+    if not instance.custom_id:
+        # Generate a custom ID with prefix "US"
+        while True:
+            custom_id = generate_custom_id("US")
+            if not User.objects.filter(custom_id=custom_id).exists():
+                instance.custom_id = custom_id
+                break
+
+# Signal to generate custom ID before saving VerificationCode
+@receiver(pre_save, sender=VerificationCode)
+def set_custom_verification_code_id(sender, instance, **kwargs):
+    if not instance.custom_id:
+        # Generate a custom ID with prefix "VC"
+        while True:
+            custom_id = generate_custom_id("VC")
+            if not VerificationCode.objects.filter(custom_id=custom_id).exists():
+                instance.custom_id = custom_id
+                break
